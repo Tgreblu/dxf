@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <title>DXF Hatch Generator (45° / 0,2 mm)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin:24px; max-width:900px}
+    fieldset{margin-bottom:16px}
+    label{display:block; margin:8px 0 4px}
+    input[type="number"], input[type="text"]{padding:8px; width:240px}
+    button{padding:10px 14px; cursor:pointer}
+    .row{display:flex; gap:24px; flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <h1>DXF Hatch Generator</h1>
+  <p>Genera un DXF con un <b>cerchio</b> e un <b>HATCH</b> a <b>45°</b> con <b>passo 0,2 mm</b> (modificabile).</p>
+
+  <fieldset>
+    <legend>Genera nuovo DXF</legend>
+    <div class="row">
+      <div>
+        <label>Centro X (mm)</label>
+        <input id="cx" type="number" step="0.01" value="0">
+        <label>Centro Y (mm)</label>
+        <input id="cy" type="number" step="0.01" value="0">
+        <label>Raggio (mm)</label>
+        <input id="r" type="number" step="0.01" value="10">
+      </div>
+      <div>
+        <label>Passo (mm)</label>
+        <input id="spacing" type="number" step="0.001" value="0.2">
+        <label>Angolo (°)</label>
+        <input id="angle" type="number" step="0.1" value="45">
+        <label>Versione DXF</label>
+        <input id="ver" type="text" value="R2018">
+      </div>
+      <div>
+        <label>Layer Cerchio</label>
+        <input id="layerCircle" type="text" value="CIRCLE">
+        <label>Layer Hatch</label>
+        <input id="layerHatch" type="text" value="HATCH">
+      </div>
+    </div>
+    <p><button id="btnGen">Genera & Scarica DXF</button></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Campitura su DXF caricato (primo cerchio trovato)</legend>
+    <label>File DXF</label>
+    <input id="file" type="file" accept=".dxf">
+    <div class="row">
+      <div>
+        <label>Passo (mm)</label>
+        <input id="spacing2" type="number" step="0.001" value="0.2">
+      </div>
+      <div>
+        <label>Angolo (°)</label>
+        <input id="angle2" type="number" step="0.1" value="45">
+      </div>
+      <div>
+        <label>Layer Hatch</label>
+        <input id="layerHatch2" type="text" value="HATCH">
+      </div>
+    </div>
+    <p><button id="btnUpload">Applica HATCH & Scarica</button></p>
+  </fieldset>
+
+  <script>
+    const BASE = "http://localhost:8000";
+
+    async function downloadBlobAs(response, suggestedName) {
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = suggestedName || "output.dxf";
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    }
+
+    document.getElementById("btnGen").addEventListener("click", async () => {
+      const payload = {
+        center_x: parseFloat(document.getElementById("cx").value),
+        center_y: parseFloat(document.getElementById("cy").value),
+        radius: parseFloat(document.getElementById("r").value),
+        spacing: parseFloat(document.getElementById("spacing").value),
+        angle_deg: parseFloat(document.getElementById("angle").value),
+        version: document.getElementById("ver").value,
+        layer_circle: document.getElementById("layerCircle").value,
+        layer_hatch: document.getElementById("layerHatch").value,
+      };
+
+      const res = await fetch(`${BASE}/generate`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        alert("Errore: " + msg);
+        return;
+      }
+      await downloadBlobAs(res, "circle_hatched.dxf");
+    });
+
+    document.getElementById("btnUpload").addEventListener("click", async () => {
+      const f = document.getElementById("file").files[0];
+      if (!f) { alert("Seleziona un file .dxf"); return; }
+      const spacing = parseFloat(document.getElementById("spacing2").value);
+      const angle = parseFloat(document.getElementById("angle2").value);
+      const layerHatch = document.getElementById("layerHatch2").value;
+
+      const form = new FormData();
+      form.append("file", f);
+      form.append("spacing", spacing);
+      form.append("angle_deg", angle);
+      form.append("layer_hatch", layerHatch);
+
+      const res = await fetch(`${BASE}/hatch-on-upload`, {
+        method: "POST",
+        body: form,
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        alert("Errore: " + msg);
+        return;
+      }
+      await downloadBlobAs(res, f.name.replace(/\.dxf$/i, "") + "_HATCHED.dxf");
+    });
+  </script>
+</body>
+</html>
